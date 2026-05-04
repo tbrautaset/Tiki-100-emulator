@@ -706,10 +706,12 @@ static LRESULT CALLBACK WindowFunc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
           int emuY = TOOLBAR_HEIGHT + (availH - dstH) / 2;
           if (emuY < TOOLBAR_HEIGHT) emuY = TOOLBAR_HEIGHT;
           if (clientW > width || availH > height) {
-            /* window larger than base emulator: toolbar + dark margins + scaled emulator */
-            /* toolbar background (full width) */
-            RECT tbRect = {0, 0, clientW, TOOLBAR_HEIGHT};
-            FillRect (hdc, &tbRect, GetSysColorBrush (COLOR_3DFACE));
+            /* window larger than base emulator: dark margins + scaled emulator */
+            /* toolbar background — only repaint if toolbar area was invalidated */
+            if (ps.rcPaint.top < TOOLBAR_HEIGHT) {
+              RECT tbRect = {0, 0, clientW, TOOLBAR_HEIGHT};
+              FillRect (hdc, &tbRect, GetSysColorBrush (COLOR_3DFACE));
+            }
             /* dark gray margin strips around scaled emulator area */
             HBRUSH darkBrush = CreateSolidBrush (RGB (64, 64, 64));
             int emuBottom = emuY + dstH;
@@ -891,7 +893,12 @@ static LRESULT CALLBACK WindowFunc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         frameCount = 0;
         currentFps = 0;
         InvalidateRect (hwndFps, NULL, FALSE);
-        InvalidateRect (hwnd, NULL, FALSE);
+        {
+          RECT cr;
+          GetClientRect (hwnd, &cr);
+          RECT emuRect = {0, TOOLBAR_HEIGHT, cr.right, cr.bottom};
+          InvalidateRect (hwnd, &emuRect, FALSE);
+        }
         LOG_I("FPS display %s", showFps ? "enabled" : "disabled");
         return 0; /* prevent menu activation */
       }
@@ -1076,7 +1083,12 @@ static LRESULT CALLBACK WindowFunc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
           frameCount = 0;
           currentFps = 0;
           InvalidateRect (hwndFps, NULL, FALSE);
-          InvalidateRect (hwnd, NULL, FALSE);
+          {
+            RECT cr;
+            GetClientRect (hwnd, &cr);
+            RECT emuRect = {0, TOOLBAR_HEIGHT, cr.right, cr.bottom};
+            InvalidateRect (hwnd, &emuRect, FALSE);
+          }
           LOG_I("FPS display %s", showFps ? "enabled" : "disabled");
           break;
         case IDM_MRU_CLEAR:
@@ -1933,8 +1945,13 @@ void changeRes (int newRes) {
     memset (screen, 0, 1024*256);
     resolution = newRes;
   }
-  /* oppdater vindu */
-  InvalidateRect (hwnd, NULL, FALSE);
+  /* oppdater vindu (only emulator area, not toolbar) */
+  {
+    RECT cr;
+    GetClientRect (hwnd, &cr);
+    RECT emuRect = {0, TOOLBAR_HEIGHT, cr.right, cr.bottom};
+    InvalidateRect (hwnd, &emuRect, FALSE);
+  }
 }
 /* Plotter en pixel med farge tatt fra pallett */
 void plotPixel (int x, int y, int color) {
@@ -1991,8 +2008,11 @@ void scrollScreen (int distance) {
   } else {
     PatBlt (memdc, 0, TOOLBAR_HEIGHT, width, -distance, PATCOPY);
   }
-  /* oppdater vindu */
-  InvalidateRect (hwnd, NULL, FALSE);
+  /* oppdater vindu (only emulator area, not toolbar) */
+  {
+    RECT emuRect = {0, TOOLBAR_HEIGHT, width, TOOLBAR_HEIGHT + height + STATUSBAR_HEIGHT + DISKBAR_HEIGHT};
+    InvalidateRect (hwnd, &emuRect, FALSE);
+  }
 }
 /* Ny farge, gitt pallett nummer og intensitet 0-255 */
 void changePalette (int colornumber, byte red, byte green, byte blue) {
